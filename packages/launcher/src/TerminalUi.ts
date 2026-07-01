@@ -93,8 +93,10 @@ export interface RootScreenProps {
   chatsLoaded?: boolean;
   /** Archive a chat (the chat-action "Archive" — reversible). */
   onArchiveChat?: (chatId: string) => void;
-  /** Resume a chat in Claude Code (stubbed for now). */
+  /** Resume a chat in Claude Code (hands the terminal to `claude --resume`). */
   onResumeChat?: (chat: ChatSummary) => void;
+  /** Transient notice shown on the connected menu, driven by the launcher (e.g. resume status/errors). */
+  externalNotice?: string | null;
   /** Called when the user chooses Quit (or Ctrl-C) on the connected menu. */
   onQuit: () => void;
 }
@@ -493,7 +495,8 @@ export function ConnectedMenuView(props: RootScreenProps): ReturnType<typeof h> 
   const [chatSel, setChatSel] = useState(0);
   const [actionSel, setActionSel] = useState(0);
   const [actionChat, setActionChat] = useState<ChatSummary | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The resume/action notice is launcher-driven (async handoff outcomes) via
+  // `props.externalNotice` — the connected menu no longer keeps its own notice state.
   // Help (FAQ) sub-view: which pane is focused (`back` left / `faq` right) and which Q
   // is hovered. The hovered answer auto-expands; everything else shows a 2-line preview.
   const [helpFocus, setHelpFocus] = useState<'back' | 'faq'>('back');
@@ -524,8 +527,11 @@ export function ConnectedMenuView(props: RootScreenProps): ReturnType<typeof h> 
           if (actionChat) props.onArchiveChat?.(actionChat.id);
           setMode('menu');
         } else if (sel === 2) {
+          // Resume in Claude Code: the launcher drives the async handoff (fetch
+          // resume-info → suspend the UI → `claude --resume`) and reports the
+          // outcome via `externalNotice`. Return to the menu so the notice shows.
           if (actionChat) props.onResumeChat?.(actionChat);
-          setNotice('Resume in Claude Code — coming soon.');
+          setMode('menu');
         }
       };
       if (key.upArrow) setActionSel((s) => Math.max(0, s - 1));
@@ -585,7 +591,6 @@ export function ConnectedMenuView(props: RootScreenProps): ReturnType<typeof h> 
     else if (key.return && chats[clampSel(chatSel)]) {
       setActionChat(chats[clampSel(chatSel)]);
       setActionSel(0);
-      setNotice(null);
       setMode('action');
     }
   });
@@ -633,8 +638,8 @@ export function ConnectedMenuView(props: RootScreenProps): ReturnType<typeof h> 
           h(Text, { color: isSel ? 'white' : 'gray', bold: isSel }, label)
         );
       }),
-      notice ? h(Text, {}, '') : null,
-      notice ? h(Text, { color: 'yellow' }, notice) : null,
+      props.externalNotice ? h(Text, {}, '') : null,
+      props.externalNotice ? h(Text, { color: 'yellow' }, props.externalNotice) : null,
       h(Text, {}, ''),
       h(Text, { color: 'gray' }, '↑/↓ select · Enter · b back')
     );
@@ -911,6 +916,14 @@ export interface LauncherUiHandle {
   setDevices: (devices: DeviceInfo[]) => void;
   /** Update the connected menu's live chats list (in place). */
   setChats: (chats: ChatSummary[]) => void;
+  /** Show (or clear, with `null`) a transient notice on the connected menu (in place). */
+  setNotice: (notice: string | null) => void;
+  /**
+   * Release the terminal (unmount Ink), run `fn` — typically an interactive child that
+   * inherits stdio (e.g. `claude --resume`) — then re-mount the SAME screen below its
+   * output. A deliberate unmount + second render() (NOT the pairing→connected rerender).
+   */
+  suspendAndRun: (fn: () => Promise<void>) => Promise<void>;
   /** Unmount the Ink app (restores the terminal). Idempotent. */
   stop: () => void;
 }
@@ -953,6 +966,7 @@ export async function startLauncherUi(options: StartLauncherUiOptions): Promise<
   let devices: DeviceInfo[] = [];
   let chats: ChatSummary[] = [];
   let chatsLoaded = false;
+  let notice: string | null = null;
 
   const build = (): ReturnType<typeof h> =>
     h(RootScreen, {
@@ -967,6 +981,7 @@ export async function startLauncherUi(options: StartLauncherUiOptions): Promise<
       devices,
       chats,
       chatsLoaded,
+      externalNotice: notice,
       onArchiveChat: options.onArchiveChat,
       onResumeChat: options.onResumeChat,
       onQuit: options.onQuit,
@@ -1007,6 +1022,28 @@ export async function startLauncherUi(options: StartLauncherUiOptions): Promise<
       chats = next;
       chatsLoaded = true; // first call flips loading → loaded (even if empty)
       rerender();
+    },
+    setNotice: (next) => {
+      notice = next;
+      rerender();
+    },
+    suspendAndRun: async (fn) => {
+      // Release the TTY: unmount Ink so the interactive child (`claude --resume`) owns
+      // the terminal. Null the instance first so any watcher rerender() during the run
+      // is a no-op (the state vars still update in place for the re-mount).
+      const inst = instance;
+      instance = null;
+      try {
+        inst?.unmount();
+      } catch {
+        // already unmounted / non-TTY — ignore.
+      }
+      try {
+        await fn();
+      } finally {
+        // Re-mount a FRESH instance below the child's output (deliberate second render()).
+        instance = renderImpl(build());
+      }
     },
     stop: () => {
       if (!instance) return;
@@ -1061,6 +1098,13 @@ export async function startStaticUi(
           : `[launcher] ${devices.length} mobile device(s) connected.`
       ),
     setChats: () => {}, // debug mode: chats UI is not interactive
+    setNotice: (next) => {
+      if (next) log(`[launcher] ${next}`);
+    },
+    suspendAndRun: async (fn) => {
+      // No live Ink in debug mode — just run the child (its inherited stdio owns the terminal).
+      await fn();
+    },
     stop: () => {},
   };
 }

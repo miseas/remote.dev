@@ -12,6 +12,7 @@ import {
   type ChatSummary,
   type ChatsWatcherHandle,
 } from './ChatsClient.js';
+import { resumeChatInClaudeCode } from './ResumeInClaudeCode.js';
 import { ensureChromium } from './ChromiumProvisioner.js';
 import { ensureCloudflared } from './CloudflaredProvisioner.js';
 import {
@@ -268,8 +269,20 @@ export class Launcher {
         );
     };
     const onResumeChat = (chat: ChatSummary) => {
-      // Stub for now — eventually `claude --resume <session>` in the repo cwd.
-      detailLog(`[chats] resume-in-claude-code requested for ${chat.id} (stub)`);
+      // Hand the terminal to `claude --resume <session>` in the chat's repo cwd. The
+      // orchestration fetches resume-info, gates on resumability + the `claude` CLI, then
+      // suspends the Ink UI for the interactive session — background services stay up, so
+      // the PC stays paired while the operator is in Claude Code. Read `this.ui`/
+      // `chatsClient` at call time (both set by the time the menu accepts input).
+      const client = chatsClient;
+      const ui = this.ui;
+      if (!client || !ui) return;
+      void resumeChatInClaudeCode(chat, {
+        getResumeInfo: (id) => client.getResumeInfo(id),
+        suspendAndRun: (fn) => ui.suspendAndRun(fn),
+        setNotice: (msg) => ui.setNotice(msg),
+        log: detailLog,
+      });
     };
 
     // 1. Mount the steady-state terminal UI as a SINGLE Ink instance, starting on a

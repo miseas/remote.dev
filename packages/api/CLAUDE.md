@@ -262,6 +262,13 @@ for recovery. **No RLS anywhere** — single-user scoping is a `user_id` filter 
   `getLocalRepositories` repo, reconciled by `session_id`, mtime-cached). The chat ROW + metadata
   stay in SQLite (hybrid). Golden fixture:
   `tests/unit/db/claude-projects-transcript-reader.test.ts`.
+  - **`getResumeInfo(chatId)` (DbAdapter) powers the launcher's "Resume in Claude Code".** Reuses
+    `resolveTranscriptKeys` to return `{ resumable, sessionId, cwd }` (or `{ resumable:false, reason }`
+    — `no-session` when the chat never executed, `transcript-missing` when the `.jsonl` is gone). The
+    launcher runs `claude --resume <sessionId>` in `cwd`. Thin route: `GET /api/chats/:chatId/resume-info`
+    (`chat.routes.ts`, owner-scoped via `getChat`) → `ChatService.getResumeInfo`. Type
+    `GetChatResumeInfoResponse` (`@vgit2/shared/types`). Test: the `getResumeInfo` block in
+    `tests/integration/db/sqlite-adapter-jsonl-mode.test.ts`.
   - **`resolveTranscriptKeys` locates the transcript by the REAL `cwd`, not just `repo_path`.** A
     terminal session run in a repo SUBDIR is filed under `slug(cwd)`, but its reconciled SQLite row
     carries `repo_path` = the repo ROOT. So the resolver returns the row's `repo_path`/`session_id`

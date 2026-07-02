@@ -105,6 +105,15 @@ setup-token` (inherited stdio), then re-discover + persist; if absent, a loud
   - **Connected menu** (`ConnectedMenuView`) — bordered, with a status line (`● label ·
 pcId`, "Last connected: <relative>"): **`1`** reveals the pairing QR (re-pair),
     **`2`/`q`/Ctrl-C** quits via `onQuit` (threaded `runUntilSignal → boot({onQuit})`).
+  - **Recent chats + Resume in Claude Code** — the menu's right column lists recent chats
+    (`ChatsClient`); a chat's action view offers **Archive** + **Resume in Claude Code**. Resume
+    (`ResumeInClaudeCode.ts` → `onResumeChat`) fetches `GET /api/chats/:id/resume-info` and, for a
+    resumable chat with the `claude` CLI present, uses the handle's **`suspendAndRun`** to unmount
+    Ink, spawn `claude --resume <sessionId>` (inherited stdio, chat cwd), then re-mount the menu —
+    background services (api/cloudflared/registration/health) stay up throughout. Not-resumable /
+    no-CLI outcomes surface a menu notice via **`setNotice`** (→ `externalNotice`) and never suspend.
+    ⚠️ `suspendAndRun` is a DELIBERATE unmount + second `render()` — the one sanctioned exception to
+    "one `render()` per session" (we WANT the fresh menu below the Claude Code session's output).
   - **Detection + live swap** — the api stamps `<DATA_DIR>/pairing-state.json`
     (`PairingStateStore`) best-effort + throttled on each authed Socket.IO connection.
     The launcher reads it at boot to pick the initial phase AND, on a first-run QR, arms

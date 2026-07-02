@@ -229,6 +229,8 @@ export type {
   GetChatMessagesResponse,
   SendChatMessageResponse,
   GetChatStatusResponse,
+  ChatResumeReason,
+  GetChatResumeInfoResponse,
   SlashCommandInfo,
   GetChatCommandsResponse,
   SummarizeChatResponse,

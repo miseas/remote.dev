@@ -310,3 +310,66 @@ describe('SqliteDbAdapter.getChatOrigin (fork-on-first-write)', () => {
     expect((await adapter.getChatOrigin('sess-src', USER)).origin).toBe('discovered');
   });
 });
+
+describe('SqliteDbAdapter — getResumeInfo (resume in Claude Code)', () => {
+  it('resumable: a portable chat with a bound session + on-disk transcript → session id + real cwd', async () => {
+    await adapter.saveChat({
+      userId: USER,
+      chatId: 'chat-live',
+      type: 'claude_code',
+      title: 'Live',
+      repoPath: repoCwd,
+    });
+    await adapter.updateChatSession('chat-live', USER, 'sess-live', 'sys');
+    await writeTranscript(repoCwd, 'sess-live');
+
+    expect(await adapter.getResumeInfo('chat-live')).toEqual({
+      resumable: true,
+      sessionId: 'sess-live',
+      cwd: repoCwd,
+    });
+  });
+
+  it("no-session: a chat that never executed (no session id) → reason 'no-session'", async () => {
+    await adapter.saveChat({
+      userId: USER,
+      chatId: 'chat-empty',
+      type: 'claude_code',
+      title: 'Never ran',
+      repoPath: repoCwd,
+    });
+
+    expect(await adapter.getResumeInfo('chat-empty')).toEqual({
+      resumable: false,
+      reason: 'no-session',
+    });
+  });
+
+  it("transcript-missing: a bound session with no .jsonl on disk → reason 'transcript-missing'", async () => {
+    await adapter.saveChat({
+      userId: USER,
+      chatId: 'chat-gone',
+      type: 'claude_code',
+      title: 'Gone',
+      repoPath: repoCwd,
+    });
+    await adapter.updateChatSession('chat-gone', USER, 'sess-gone', 'sys');
+    // deliberately do NOT writeTranscript(repoCwd, 'sess-gone')
+
+    expect(await adapter.getResumeInfo('chat-gone')).toEqual({
+      resumable: false,
+      reason: 'transcript-missing',
+    });
+  });
+
+  it('resumable via discovery: a terminal transcript with no SQLite row resolves to its real cwd', async () => {
+    await writeTranscript(repoCwd, 'sess-term');
+
+    // chatId === the session id for a terminal-originated (discovered) chat
+    expect(await adapter.getResumeInfo('sess-term')).toEqual({
+      resumable: true,
+      sessionId: 'sess-term',
+      cwd: repoCwd,
+    });
+  });
+});

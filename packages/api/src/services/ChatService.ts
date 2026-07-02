@@ -4,7 +4,13 @@ import { SOPService } from './SOPService.js';
 import { DbAdapter, type ChatOrigin } from '../db/DbAdapter.js';
 import { BufferedMessage } from '../types/index.js';
 
-import type { ChatStatus, StoredChat, ChatType, ChatCategory } from '@vgit2/shared/types';
+import type {
+  ChatStatus,
+  StoredChat,
+  ChatType,
+  ChatCategory,
+  GetChatResumeInfoResponse,
+} from '@vgit2/shared/types';
 
 /**
  * Options for saving a chat via ChatService
@@ -385,6 +391,15 @@ export class ChatService {
     authToken?: string
   ): Promise<StoredChat | undefined> {
     return this.dbAdapter.getChat(chatId, userId, authToken);
+  }
+
+  /**
+   * Whether a chat can be resumed as a terminal Claude Code session, plus the session id
+   * + working directory to run `claude --resume` in. The CALLER verifies ownership first
+   * (a prior `getChat` returning the row); this only resolves the resume specifics.
+   */
+  async getResumeInfo(chatId: string): Promise<GetChatResumeInfoResponse> {
+    return this.dbAdapter.getResumeInfo(chatId);
   }
 
   /**

@@ -28,6 +28,7 @@ import type {
   StoredChat,
   ChatCategory,
   ChatStatus,
+  GetChatResumeInfoResponse,
   BufferedMessage,
   ServiceConnection,
   GetUserConnectionsOptions,
@@ -216,6 +217,16 @@ export class JsonDbAdapter implements DbAdapter {
       return undefined;
     }
     return this.transformer.transformChatFromDb(chat);
+  }
+
+  /**
+   * Legacy JSON adapter has no transcript discovery: resume off the row's own keys, with
+   * no on-disk transcript check. A row with no session id → `no-session`.
+   */
+  async getResumeInfo(chatId: string): Promise<GetChatResumeInfoResponse> {
+    const chat = await this.store.getChat(chatId);
+    if (!chat?.session_id || !chat.repo_path) return { resumable: false, reason: 'no-session' };
+    return { resumable: true, sessionId: chat.session_id, cwd: chat.repo_path };
   }
 
   /**

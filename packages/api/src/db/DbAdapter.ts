@@ -3,6 +3,7 @@ import type {
   ChatCategory,
   ChatStatus,
   ChatType,
+  GetChatResumeInfoResponse,
   BufferedMessage,
   ServiceConnection,
   StoredServiceConnection,
@@ -141,6 +142,15 @@ export interface DbAdapter {
    * @param authToken - Optional JWT auth token (unused by the local SQLite adapter)
    */
   getChat(chatId: string, userId: string, authToken?: string): Promise<StoredChat | undefined>;
+
+  /**
+   * Resolve whether a chat can be resumed as a terminal Claude Code session, plus the
+   * session id + real working directory to run `claude --resume` in. Powers the
+   * launcher's "Resume in Claude Code" action. Adapters that can locate the transcript
+   * verify it exists; a chat that never executed resolves to `{ resumable: false,
+   * reason: 'no-session' }`. Ownership is enforced by the caller (single-user runtime).
+   */
+  getResumeInfo(chatId: string): Promise<GetChatResumeInfoResponse>;
 
   /**
    * Classify where a chatId comes from (rev9 fork-on-first-write):

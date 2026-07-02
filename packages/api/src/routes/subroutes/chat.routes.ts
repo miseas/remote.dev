@@ -20,6 +20,7 @@ import type {
   GetChatMessagesResponse,
   SendChatMessageResponse,
   GetChatStatusResponse,
+  GetChatResumeInfoResponse,
   GetChatCommandsResponse,
   SummarizeChatResponse,
   AnalyzeIntentResponse,
@@ -519,6 +520,32 @@ export function createChatRoutes(
     } catch (error) {
       console.error('[API] GET /chats/:chatId/status error:', error);
       return res.status(500).json({ error: 'Failed to get status' });
+    }
+  });
+
+  // Resume-in-Claude-Code info: can this chat be resumed as a terminal `claude --resume`
+  // session, and if so with which session id + cwd. Powers the launcher's connected-menu
+  // action. Owner-scoped via getChat (404 for another user's / unknown chat).
+  router.get('/chats/:chatId/resume-info', requireAuth, async (req, res) => {
+    try {
+      const userEmail = req.session.userEmail;
+      if (!userEmail) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+      const { chatId } = req.params;
+      const chatIdStr = Array.isArray(chatId) ? chatId[0] : chatId;
+      const authToken = getAuthToken(req);
+
+      const chat = await chatService.getChat(chatIdStr, userEmail, authToken);
+      if (!chat) {
+        return res.status(404).json({ error: 'Chat not found' });
+      }
+
+      const response: GetChatResumeInfoResponse = await chatService.getResumeInfo(chatIdStr);
+      return res.json(response);
+    } catch (error) {
+      console.error('[API] GET /chats/:chatId/resume-info error:', error);
+      return res.status(500).json({ error: 'Failed to get resume info' });
     }
   });
 

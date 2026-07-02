@@ -11,6 +11,8 @@
  * does NOT delete the shared ~/.claude/projects transcript).
  */
 
+import type { GetChatResumeInfoResponse } from '@vgit2/shared/types';
+
 type FetchImpl = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** A chat row shaped for the terminal list. */
@@ -84,6 +86,18 @@ export class ChatsClient {
       .sort(
         (a, b) => (Date.parse(b.lastUpdated ?? '') || 0) - (Date.parse(a.lastUpdated ?? '') || 0)
       );
+  }
+
+  /**
+   * Resume info for a chat: whether it can be resumed as a terminal `claude --resume`
+   * session, and (when it can) the session id + working directory. The api resolves the
+   * session id + real transcript cwd; this is a thin authed GET.
+   */
+  async getResumeInfo(chatId: string): Promise<GetChatResumeInfoResponse> {
+    const url = `${this.base}/api/chats/${encodeURIComponent(chatId)}/resume-info`;
+    const res = await this.fetchImpl(url, { method: 'GET', headers: this.authHeaders() });
+    if (!res.ok) throw new Error(`GET /api/chats/:id/resume-info → HTTP ${res.status}`);
+    return (await res.json()) as GetChatResumeInfoResponse;
   }
 
   /** Archive (or unarchive) a chat — reversible; never touches the transcript. */

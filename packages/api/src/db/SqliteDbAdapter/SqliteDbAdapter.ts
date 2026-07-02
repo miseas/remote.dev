@@ -60,6 +60,7 @@ import type {
   StoredChat,
   ChatCategory,
   ChatStatus,
+  GetChatResumeInfoResponse,
   BufferedMessage,
   ServiceConnection,
   GetUserConnectionsOptions,
@@ -204,6 +205,29 @@ export class SqliteDbAdapter implements DbAdapter {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Whether a chat can be resumed as a terminal `claude --resume <sessionId>` session,
+   * and the session id + REAL working directory to run it in. Reuses
+   * {@link resolveTranscriptKeys} so a chat whose session ran in a repo SUBDIR resolves
+   * to the transcript's real cwd (not merely the row's `repo_path`). A chat that never
+   * executed (no session id) → `no-session`; a known session whose transcript is gone →
+   * `transcript-missing`. When the transcript config dir is unset (`CHAT_MESSAGE_SOURCE=
+   * sqlite`) the on-disk check is skipped and the row's keys are trusted.
+   */
+  async getResumeInfo(chatId: string): Promise<GetChatResumeInfoResponse> {
+    const keys = await this.resolveTranscriptKeys(chatId);
+    const sessionId = keys?.sessionId ?? null;
+    const cwd = keys?.repoPath ?? null;
+    if (!sessionId || !cwd) return { resumable: false, reason: 'no-session' };
+    if (this.configDir) {
+      const file = transcriptPath(this.configDir, cwd, sessionId);
+      if (!(await this.transcriptExists(file))) {
+        return { resumable: false, reason: 'transcript-missing' };
+      }
+    }
+    return { resumable: true, sessionId, cwd };
   }
 
   // ==========================================================================

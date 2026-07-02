@@ -186,6 +186,25 @@ export interface GetChatStatusResponse {
   lastActivity?: number;
 }
 
+/** Why a chat cannot be resumed in terminal Claude Code. */
+export type ChatResumeReason = 'no-session' | 'transcript-missing';
+
+/**
+ * GET /api/chats/:chatId/resume-info
+ *
+ * Whether a chat can be resumed as a live terminal Claude Code session on the host
+ * machine and, when it can, the session id + working directory to run
+ * `claude --resume <sessionId>` in. Powers the launcher's "Resume in Claude Code"
+ * connected-menu action. `no-session` = the chat never executed (no session id yet);
+ * `transcript-missing` = the `~/.claude/projects/<slug>/<session>.jsonl` file is gone.
+ */
+export interface GetChatResumeInfoResponse {
+  resumable: boolean;
+  sessionId?: string;
+  cwd?: string;
+  reason?: ChatResumeReason;
+}
+
 /**
  * A slash command or skill available to a chat — the items the mobile composer's
  * `/` picker lists. `name` is the invocation name WITHOUT the leading slash; the
